@@ -387,7 +387,7 @@ class Attn_Softmax(Function):
       #   END ASSIGN4_1_1
 
     @staticmethod
-    def backward(ctx: Context, out_grad: Tensor) -> Tensor:
+    def backward(ctx: Context, out_grad: Tensor) -> Tuple[Tensor, float]:
       #   BEGIN ASSIGN4_1_2
       raise NotImplementedError("Need to implement for Assignment 3")
       #   END ASSIGN4_1_2
