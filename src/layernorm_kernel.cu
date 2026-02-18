@@ -17,9 +17,7 @@ const float LN_EPSILON = 1e-8f;
 @brief: ker_layer_norm
 Standard layer normalization.
 It will not only output the layer norm result,
-  but also outputs variance.
-  may also output means, depends on whether
-  the means argument is nullptr
+  but also outputs variance and means.
 
 @thread
 gridDim.x = batch_size * seq_len
@@ -28,7 +26,7 @@ blockDim.x = hidden_size
 @param
 ln_res: [batch_size * seq_len, hidden_size], ln result.
 vars: [batch_size * seq_len], variance per token
-means: [batch_size * seq_len], means per token, can be nullput
+means: [batch_size * seq_len], means per token
 inp: [batch_size * seq_len, hidden_size], ln input.
 scale: [hidden_size], ln scale
 bias: [hidden_size], ln bias
@@ -128,8 +126,7 @@ void launch_layernorm(float *ln_res, float *vars, float *means,
 Layer norm backword kernel, compute the gradient of gamma and betta.
 dbetta = sum(dout, dim=0)
 dgamma = sum(xhat * dout, dim=0)
-xhat = (input - mean) * rsqrt(var) or
-  (output - betta) / gamma
+xhat = (input - mean) * rsqrt(var)
 
 @thread
 gridDim.x = hidden_size / 32
@@ -140,17 +137,15 @@ blockDim.y = 32
 gamma_grad: [hidden_size], gradient of gamma
 betta_grad: [hidden_size], gradient of betta
 out_grad: [batch_size * seq_len, hidden_size], gradient of betta ln output
-inp_or_out: [batch_size * seq_len, hidden_size], ln output if means is nullptr
-  ln input if means is not nullptr
+inp: [batch_size * seq_len, hidden_size], ln input
 gamma: [hidden_size], gamma of ln,
-  used to compute xhat, maybe nullptr
+  used to compute xhat
 betta: [hidden_size], betta of ln,
-  used to compute xhat, maybe nullptr
+  used to compute xhat
 vars: [batch_size * seq_len], variance of ln forward,
-  used to compute xhat, maybe nullptr
+  used to compute xhat
 means: [batch_size * seq_len], mean of ln forward,
-  used to compute xhat, maybe nullptr
-(gamma && betta) ^ (vars && means) should be true
+  used to compute xhat
 */
 template <typename T>
 __global__ void ker_ln_bw_dgamma_dbetta(T *gamma_grad, T *betta_grad,
@@ -194,8 +189,7 @@ __global__ void ker_ln_bw_dgamma_dbetta(T *gamma_grad, T *betta_grad,
 Layer norm backword kernel, compute the gradient of input.
 dinp = (dxhat - (sum(dxhat) + xhat * sum(dxhat * xhat)) / hidden_dim)
   * rsqrt(var)
-xhat = (input - mean) * rsqrt(var) if mean is not nullptr
-       (output - betta) / gamma if mean is nullptr
+xhat = (input - mean) * rsqrt(var)
 dxhat = dout * gamma
 
 
@@ -206,18 +200,15 @@ blockDim.x = hidden_size
 @param
 inp_grad: [batch_size * seq_len, hidden_size], gradient of betta ln output
 out_grad: [batch_size * seq_len, hidden_size], gradient of betta ln output
-residual_grad: [batch_size * seq_len, hidden_size], gradient of residual input,
-  usually appear in pre-layer-norm for transformer layer, maybe nullptr
-inp_or_out: [batch_size * seq_len, hidden_size], ln output if means is nullptr
-  ln input if means is not nullptr
+inp: [batch_size * seq_len, hidden_size], ln input
 gamma: [hidden_size], gamma of ln,
   used to compute xhat and dxhat
 betta: [hidden_size], betta of ln,
-  used to compute xhat, maybe nullptr
+  used to compute xhat
 vars: [batch_size * seq_len], variance of ln forward,
   used to compute xhat and dinp
 means: [batch_size * seq_len], mean of ln forward,
-  used to compute xhat, maybe nullptr
+  used to compute xhat
 */
 template <typename T>
 __global__ void ker_ln_bw_dinp(T *inp_grad, const T *out_grad, const T *inp,
